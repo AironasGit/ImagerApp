@@ -21,12 +21,12 @@ def main():
     _, images_folder, temp_folder = create_dirs()
     
     while True:
-        if keyboard.is_pressed('1'):
+        if keyboard.is_pressed('1'): # Full screen shot
             screen = pyautogui.screenshot()
             image_name = f'\\{int(time.time())}.jpg'
             image_path = images_folder + image_name 
             screen.save(image_path)
-        if keyboard.is_pressed('2'):
+        if keyboard.is_pressed('2'): # Select a rectangle inside screen shot
             screen = pyautogui.screenshot()
             image_name = f'\\{int(time.time())}.jpg'
             temp_image_path = temp_folder + image_name
