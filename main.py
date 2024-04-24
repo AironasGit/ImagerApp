@@ -5,19 +5,13 @@ import time
 import configparser
 from os import path
 from datetime import date
+import tkinter.messagebox
 import tkinter as tk
 import psycopg2 as pg
 from PIL import Image, ImageTk
 
 def popup_message(message: str):
-    window = tk.Tk()
-    window.resizable(False, False)
-    window.attributes('-topmost', True)
-    canvas = tk.Canvas(window, borderwidth=0, highlightthickness=0)
-    canvas.pack(expand=True)
-    label = tk.Label(canvas, text=message, font=('Arial', 15), wraplength=300).grid()
-    window.mainloop()
-
+    tkinter.messagebox.showinfo("",message) 
 
 class DB:
     __config = configparser.ConfigParser()
@@ -51,11 +45,21 @@ class DB:
         self.__cur.execute('''INSERT INTO image (data, name, date) VALUES (%s, %s, %s)''', (data, name, date))
         self.__conn.commit()
     
-    def add_row_user(self, username: str, password: str) -> None:
+    def add_row_user(self, username: str, password: str):
         self.__cur.execute('''INSERT INTO users (username, password) VALUES (%s, %s)''', (username, password))
         self.__conn.commit()
+        
+    def check_user_exists(self, username: str, password: str) -> bool:
+        self.__cur.execute('''SELECT username, password
+            FROM users
+            WHERE username = (%s) AND password = (%s)
+            ''', (username, password))
+        if self.__cur.fetchall() == []:
+            return False
+        else:
+            return True
     
-    def __create_image(self) -> None:
+    def __create_image(self):
         self.__cur.execute('''CREATE TABLE IF NOT EXISTS image (
             id SERIAL PRIMARY KEY,
             data BYTEA,
@@ -66,7 +70,7 @@ class DB:
         self.__conn.commit()
         
         
-    def __create_user(self) -> None:
+    def __create_user(self):
         self.__cur.execute('''CREATE TABLE IF NOT EXISTS users (
             id SERIAL PRIMARY KEY,
             username VARCHAR(255),
@@ -74,7 +78,6 @@ class DB:
             );
             ''')
         self.__conn.commit()
-
 
 class ImageRectangle:
     id: int = None
@@ -108,9 +111,8 @@ class ImageRectangle:
     def __update_rect(self):
         self.image_canvas.coords(self.id, self.x1, self.y1, self.x2, self.y2)
       
-        
 class AppDirs:
-    def __init__(self) -> None:
+    def __init__(self):
         self.user_docs_dir: str = os.path.expanduser('~\\Documents')
         self.app_dir = self.user_docs_dir + "\\Imager"
         self.images_dir = self.app_dir + "\\Images"
@@ -126,10 +128,11 @@ class AppDirs:
         if not os.path.exists(dir):
             os.mkdir(dir)
             
-   
+
 class User:
-    username : str = None
-    __password : str = None
+    logged_in: bool = False
+    username: str = None
+    __password: str = None
     def __init__(self):
         self.db = DB()
         
@@ -144,6 +147,18 @@ class User:
         self.username = username.get()
         self.__hash_password(password.get())
         self.db.add_row_user(self.username, self.__password)
+        popup_message("Account created!")
+        
+    def login(self, username: tk.StringVar, password: tk.StringVar):
+        if not self.__username_rules(username.get()):
+            return None
+        self.username = username.get()
+        self.__hash_password(password.get())
+        if self.db.check_user_exists(self.username, self.__password):
+            self.logged_in = True
+            popup_message("Login successful!")
+        else:
+            popup_message("Incorrect username or password!")
     
     def __username_rules(self, username: str) -> bool:
         min_length = 3
@@ -179,7 +194,6 @@ class User:
         from hashlib import sha256
         self.__password = sha256(password.encode('utf-8')).hexdigest()
         
-    
 def create_window(temp_path, path):
     rect = ImageRectangle(0, 0, 0, 0)
     rect.temp_img_path = temp_path
@@ -204,69 +218,108 @@ def create_window(temp_path, path):
 
     window.mainloop()
 
+class LoginWindow:
+    username: tk.StringVar
+    __password: tk.StringVar
+    user: User = User()
+    def __init__(self):
+        self.__init_ui()
+    
+    def __init_ui(self):
+        ratio = 35
+        self.window = tk.Tk()
+        self.window.resizable(False, False)
+        width, height = 16*ratio, 9*ratio
+        x = (self.window.winfo_screenwidth()//2)-(width//2)
+        y = (self.window.winfo_screenheight()//2)-(height//2)
+        self.window.geometry('{}x{}+{}+{}'.format(width, height, x, y))
+        canvas = tk.Canvas(self.window, width=width, height=height, borderwidth=0, highlightthickness=0)
+        canvas.pack(expand=True)
+        self.username = tk.StringVar()
+        self.__password= tk.StringVar()
+        login_label = tk.Label(canvas, text='Login', font=('Arial', 25)).place(x=220, y=50)
+        login_username_label = tk.Label(canvas, text='Username', font=('Arial', 15)).place(x=220, y=100)
+        login_username_entry = tk.Entry(canvas, font=('Arial', 15), textvariable=self.username).place(x=150, y=130)
+        login_password_label = tk.Label(canvas, text='Password', font=('Arial', 15)).place(x=220, y=170)
+        login_password_entry = tk.Entry(canvas, font=('Arial', 15), textvariable=self.__password, show='*').place(x=150, y=200)
+        login_button = tk.Button(canvas, text='Login', command=self.__login_button, width=31).place(x=150, y=240)
+        register_button = tk.Button(canvas, text='Register', command=self.__register_button, width=31).place(x=150, y=270)
+        self.window.mainloop()    
+    
+    def __register_button(self):
+        self.window.destroy()
+        RegisterWindow()
+    
+    def __login_button(self):
+        self.user.login(self.username, self.__password)
+        if self.user.logged_in:
+            self.window.destroy()
+    
+class RegisterWindow:
+    username: tk.StringVar
+    password: tk.StringVar
+    confirm_password: tk.StringVar
+    user: User = User()
+    def __init__(self):
+        self.__init_ui()
+        
+    def __init_ui(self):
+        ratio = 50
+        self.window = tk.Tk()
+        self.window.resizable(False, False)
+        width, height = 16*ratio, 9*ratio
+        x = (self.window.winfo_screenwidth()//2)-(width//2)
+        y = (self.window.winfo_screenheight()//2)-(height//2)
+        self.window.geometry('{}x{}+{}+{}'.format(width, height, x, y))
+        canvas = tk.Canvas(self.window, width=width, height=height, borderwidth=0, highlightthickness=0)
+        canvas.pack(expand=True)
+        self.username = tk.StringVar()
+        self.password = tk.StringVar()
+        self.confirm_password = tk.StringVar()
+        label = tk.Label(canvas, text='Register', font=('Arial', 25)).place(x=325, y=20)
+        username_label = tk.Label(canvas, text='Username', font=('Arial', 15)).place(x=345, y=70)
+        username_entry = tk.Entry(canvas, font=('Arial', 15), textvariable=self.username).place(x=275, y=100)
+        password_label = tk.Label(canvas, text='Password', font=('Arial', 15)).place(x=345, y=140)
+        password_entry = tk.Entry(canvas, font=('Arial', 15), textvariable=self.password, show='*').place(x=275, y=170)
+        confirm_password_label = tk.Label(canvas, text='Confirm Password', font=('Arial', 15)).place(x=305, y=210)
+        confirm_password_entry = tk.Entry(canvas, font=('Arial', 15), textvariable=self.confirm_password, show='*').place(x=275, y=240)
+        register_button = tk.Button(canvas, text='Register', command=self.__register_button, width=31).place(x=275, y=280)
+        login_button = tk.Button(canvas, text='Login', command=self.__login_button, width=31).place(x=275, y=310)
+        self.window.mainloop()
+    
+    def __login_button(self):
+        self.window.destroy()
+        LoginWindow()
 
-def login_window(window_to_close: tk.Tk = None):
-    if window_to_close != None:
-        window_to_close.destroy()
-    ratio = 35
-    window = tk.Tk()
-    window.resizable(False, False)
-    width, height = 16*ratio, 9*ratio
+    def __register_button(self):
+        self.user.register(self.username, self.password, self.confirm_password)
     
-    canvas = tk.Canvas(window, width=width, height=height, borderwidth=0, highlightthickness=0)
-    canvas.pack(expand=True)
-    
-    user = User()
-    username = tk.StringVar()
-    password = tk.StringVar()
-    login_label = tk.Label(canvas, text='Login', font=('Arial', 25)).place(x=220, y=50)
-    login_username_label = tk.Label(canvas, text='Username', font=('Arial', 15)).place(x=220, y=100)
-    login_username_entry = tk.Entry(canvas, font=('Arial', 15), textvariable=username).place(x=150, y=130)
-    login_password_label = tk.Label(canvas, text='Password', font=('Arial', 15)).place(x=220, y=170)
-    login_password_entry = tk.Entry(canvas, font=('Arial', 15), textvariable=password, show='*').place(x=150, y=200)
-    login_button = tk.Button(canvas, text='Login', command=lambda : User.register(username, password), width=31).place(x=150, y=240)
-    register_button = tk.Button(canvas, text='Register', command=lambda : register_window(window), width=31).place(x=150, y=270)
-    
-    window.mainloop()
-    
-    
-def register_window(window_to_close: tk.Tk = None):
-    if window_to_close != None:
-        window_to_close.destroy()
-    ratio = 50
-    window = tk.Tk()
-    window.resizable(False, False)
-    width, height = 16*ratio, 9*ratio
-    
-    canvas = tk.Canvas(window, width=width, height=height, borderwidth=0, highlightthickness=0)
-    canvas.pack(expand=True)
-    
-    user = User()
-    username = tk.StringVar()
-    password = tk.StringVar()
-    confirm_password = tk.StringVar()
-    label = tk.Label(canvas, text='Register', font=('Arial', 25)).place(x=325, y=20)
-    username_label = tk.Label(canvas, text='Username', font=('Arial', 15)).place(x=345, y=70)
-    username_entry = tk.Entry(canvas, font=('Arial', 15), textvariable=username).place(x=275, y=100)
-    password_label = tk.Label(canvas, text='Password', font=('Arial', 15)).place(x=345, y=140)
-    password_entry = tk.Entry(canvas, font=('Arial', 15), textvariable=password, show='*').place(x=275, y=170)
-    confirm_password_label = tk.Label(canvas, text='Confirm Password', font=('Arial', 15)).place(x=305, y=210)
-    confirm_password_entry = tk.Entry(canvas, font=('Arial', 15), textvariable=confirm_password, show='*').place(x=275, y=240)
-    register_button = tk.Button(canvas, text='Register', command=lambda : user.register(username, password, confirm_password), width=31).place(x=275, y=280)
-    login_button = tk.Button(canvas, text='Login', command=lambda : login_window(window), width=31).place(x=275, y=310)
-    
-    window.mainloop()
-
-
 def main():
-    register_window()
+    login_window = LoginWindow()
+    while True:
+        if login_window.user.logged_in:
+            app_dirs = AppDirs()
+            if keyboard.is_pressed('1'): # Full screen shot
+                screen = pyautogui.screenshot()
+                image_name = f'\\{int(time.time())}.jpg'
+                image_path = app_dirs.images_dir + image_name 
+                screen.save(image_path)
+            if keyboard.is_pressed('2'): # Select a rectangle inside screen shot
+                screen = pyautogui.screenshot()
+                image_name = f'\\{int(time.time())}.jpg'
+                temp_image_path = app_dirs.temp_dir + image_name
+                image_path = app_dirs.images_dir + image_name
+                screen.save(temp_image_path)
+                create_window(temp_image_path, image_path)
+        else:
+            break
     #app_dirs = AppDirs()
     #db = DB()
     #with open("C:\\Users\\Aironas\\Documents\\Imager\\Images\\1713174697.jpg", "rb") as image:
     #    f = image.read()
     #    b = bytearray(f)
     #db.add_row_image(b, "asd", date.today())
-    #del db
+    #del db22
     
     #while True:
     #    if keyboard.is_pressed('1'): # Full screen shot
