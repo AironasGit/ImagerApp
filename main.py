@@ -1,4 +1,3 @@
-import pyautogui
 import keyboard
 import os
 import time
@@ -8,7 +7,7 @@ from datetime import date
 import tkinter.messagebox
 import tkinter as tk
 import psycopg2 as pg
-from PIL import Image, ImageTk
+from PIL import Image, ImageTk, ImageGrab
 
 def popup_message(message: str):
     tkinter.messagebox.showinfo("",message) 
@@ -79,37 +78,32 @@ class DB:
             ''')
         self.__conn.commit()
 
-class ImageRectangle:
+class DrawRectangle:
     id: int = None
-    img_path: str = None
-    temp_img_path: str = None
-    window: tk.Tk = None
-    image_canvas: tk.Canvas = None
-    
-    def __init__(self, x1: int, y1: int, x2: int, y2: int):
-        self.x1: int = x1
-        self.y1: int = y1
-        self.x2: int = x2
-        self.y2: int = y2
+    def __init__(self, window: tk.Tk, canvas:tk.Canvas, image: Image):
+        self.window = window
+        self.image: Image = image
+        self.canvas = canvas
+        self.x1: int = 0
+        self.y1: int = 0
+        self.x2: int = 0
+        self.y2: int = 0
         
-    def update_start_point(self, mouse):
+    def update_start_point(self, mouse: tk.Event):
         self.x1 = mouse.x
         self.y1 = mouse.y
         
-    def update_end_point(self, mouse):
+    def update_end_point(self, mouse: tk.Event):
         self.x2 = mouse.x
         self.y2 = mouse.y
         self.__update_rect()
 
-    def save_rect(self):
-        img = Image.open(self.temp_img_path)
-        cropped_img = img.crop(self.image_canvas.coords(self.id))
-        cropped_img.save(self.img_path)
-        os.remove(self.temp_img_path)
-        self.window.destroy()
+    def get_rect(self) -> Image:
+        cropped_img = self.image.crop(self.canvas.coords(self.id))
+        return cropped_img
     
     def __update_rect(self):
-        self.image_canvas.coords(self.id, self.x1, self.y1, self.x2, self.y2)
+        self.canvas.coords(self.id, self.x1, self.y1, self.x2, self.y2)
       
 class AppDirs:
     def __init__(self):
@@ -128,7 +122,6 @@ class AppDirs:
         if not os.path.exists(dir):
             os.mkdir(dir)
             
-
 class User:
     logged_in: bool = False
     username: str = None
@@ -194,29 +187,41 @@ class User:
         from hashlib import sha256
         self.__password = sha256(password.encode('utf-8')).hexdigest()
         
-def create_window(temp_path, path):
-    rect = ImageRectangle(0, 0, 0, 0)
-    rect.temp_img_path = temp_path
-    rect.img_path = path
-
-    window = tk.Tk()
-    window.attributes('-fullscreen', True)
-    window.attributes('-topmost', True)
-
-    img = ImageTk.PhotoImage(Image.open(temp_path))
-    canvas = tk.Canvas(window, width=img.width(), height=img.height(), borderwidth=0, highlightthickness=0)
-    canvas.pack(expand=True)
-    canvas.create_image(0, 0, image=img, anchor=tk.NW)
+class EditableImageWindow:
+    def __init__(self, image: Image, image_path: str):
+        self.image: Image = image
+        self.image_path = image_path
+        self.__init_ui()
     
-    rect.image_canvas = canvas
-    rect.window = window
-    rect.id = canvas.create_rectangle(rect.x1, rect.y1, rect.x2, rect.y2, dash=(2,2), fill='', outline='red')
-    
-    canvas.bind('<Button-1>', lambda event: rect.update_start_point(event))
-    canvas.bind('<B1-Motion>', lambda event: rect.update_end_point(event))
-    canvas.bind('<ButtonRelease-1>', lambda event: rect.save_rect())
+    def __init_ui(self):
+        self.window = tk.Tk()
+        self.window.attributes('-fullscreen', True)
+        self.window.attributes('-topmost', True)
 
-    window.mainloop()
+        canvas = tk.Canvas(self.window, width=self.image.size[0], height=self.image.size[1], borderwidth=0, highlightthickness=0)
+        canvas.pack(expand=True)
+        image = ImageTk.PhotoImage(self.image)
+        canvas.create_image(0, 0, image=image, anchor=tk.NW)
+        
+        self.rect = DrawRectangle(self.window, canvas, self.image)
+        self.rect.id = canvas.create_rectangle(self.rect.x1, self.rect.y1, self.rect.x2, self.rect.y2, dash=(2,2), fill='', outline='red')
+
+        canvas.bind('<Button-1>', lambda event: self.__button1(event))
+        canvas.bind('<B1-Motion>', lambda event: self.__button1_motion(event))
+        canvas.bind('<ButtonRelease-1>', lambda event: self.__button1_release())
+
+        self.window.mainloop()
+    
+    def __button1(self, event: tk.Event):
+        self.rect.update_start_point(event)
+    
+    def __button1_motion(self, event: tk.Event):
+        self.rect.update_end_point(event)
+    
+    def __button1_release(self):
+        rect_image = self.rect.get_rect()
+        rect_image.save(self.image_path)
+        self.window.destroy()
 
 class LoginWindow:
     username: tk.StringVar
@@ -300,17 +305,15 @@ def main():
         if login_window.user.logged_in:
             app_dirs = AppDirs()
             if keyboard.is_pressed('1'): # Full screen shot
-                screen = pyautogui.screenshot()
+                screen = ImageGrab.grab()
                 image_name = f'\\{int(time.time())}.jpg'
                 image_path = app_dirs.images_dir + image_name 
                 screen.save(image_path)
             if keyboard.is_pressed('2'): # Select a rectangle inside screen shot
-                screen = pyautogui.screenshot()
+                screen = ImageGrab.grab()
                 image_name = f'\\{int(time.time())}.jpg'
-                temp_image_path = app_dirs.temp_dir + image_name
                 image_path = app_dirs.images_dir + image_name
-                screen.save(temp_image_path)
-                create_window(temp_image_path, image_path)
+                EditableImageWindow(screen, image_path)
         else:
             break
     #app_dirs = AppDirs()
@@ -321,19 +324,6 @@ def main():
     #db.add_row_image(b, "asd", date.today())
     #del db22
     
-    #while True:
-    #    if keyboard.is_pressed('1'): # Full screen shot
-    #        screen = pyautogui.screenshot()
-    #        image_name = f'\\{int(time.time())}.jpg'
-    #        image_path = app_dirs.images_dir + image_name 
-    #        screen.save(image_path)
-    #    if keyboard.is_pressed('2'): # Select a rectangle inside screen shot
-    #        screen = pyautogui.screenshot()
-    #        image_name = f'\\{int(time.time())}.jpg'
-    #        temp_image_path = app_dirs.temp_dir + image_name
-    #        image_path = app_dirs.images_dir + image_name
-    #        screen.save(temp_image_path)
-    #        create_window(temp_image_path, image_path)
 
 if __name__ == "__main__":
     main()
