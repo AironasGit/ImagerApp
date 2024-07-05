@@ -9,10 +9,28 @@ import tkinter as tk
 import psycopg2 as pg
 from PIL import Image, ImageTk, ImageGrab
 import requests
+from win32gui import GetWindowText, GetForegroundWindow
 
 def popup_message(message: str):
     tkinter.messagebox.showinfo("",message) 
 
+class API:
+    validate_user_url: str
+    upload_img_url: str
+    def __init__(self):
+        self.validate_user_url = 'http://127.0.0.1:8000/imager/api/validate_user/'
+        self.upload_img_url = 'http://127.0.0.1:8000/imager/api/upload_img/'
+        
+    def login(self, username: str, password: str) -> int:
+        data = {'username': username, 'password': password}
+        r = requests.post(url = self.validate_user_url, data=data)
+        return r.status_code
+    
+    def upload_img(self, username: str, password: str, is_private: bool, description: str, image) -> int:
+        data = {'username': username, 'password': password, 'is_private': is_private, 'description': description}
+        r = requests.post(url = self.upload_img_url, data=data, files={'image': image})
+        return r.status_code
+        
 class DrawRectangle:
     id: int = None
     def __init__(self, window: tk.Tk, canvas:tk.Canvas, image: Image):
@@ -65,12 +83,11 @@ class User:
         pass
         
     def login(self, username: tk.StringVar, password: tk.StringVar):
-        url = "http://127.0.0.1:8000/imager/api/validate_user/"
+        api = API()
         self.username = username.get()
         self._password = password.get()
-        data = {'username': self.username, 'password': self._password}
-        r = requests.post(url = url, data=data)
-        match r.status_code:
+        r_code =api.login(self.username, self._password)
+        match r_code:
             case 200:
                 self.logged_in = True
                 popup_message("Login successful!")
@@ -183,17 +200,20 @@ class SettingsWindow:
         check_button_db_var = tk.IntVar(value=self.storage_db)
         check_button_db = tk.Checkbutton(canvas, text='Store in Database',variable=check_button_db_var, onvalue=1, offvalue=0, command= lambda: self.__change_setting('Storage', 'Db', str(check_button_db_var.get()))).place(x=50, y=70)
         
+        check_button_private_var = tk.IntVar(value=self.is_private)
+        check_button_private = tk.Checkbutton(canvas, text='Private',variable=check_button_private_var, onvalue=1, offvalue=0, command= lambda: self.__change_setting('Storage', 'is_private', str(check_button_private_var.get()))).place(x=50, y=90)
+        
         self.screen_shot_var = tk.StringVar(value=self.screen_shot)
-        screen_shot_label = tk.Label(canvas, text='Keybind to screen shot').place(x=180, y=95)
-        screen_shot_entry = tk.Entry(canvas, textvariable=self.screen_shot_var).place(x=55, y=95)
+        screen_shot_label = tk.Label(canvas, text='Keybind to screen shot').place(x=180, y=115)
+        screen_shot_entry = tk.Entry(canvas, textvariable=self.screen_shot_var).place(x=55, y=115)
         
         self.screen_shot_edit_var = tk.StringVar(value=self.screen_shot_edit)
-        screen_shot_edit_label = tk.Label(canvas, text='Keybind to screen shot and edit').place(x=180, y=120)
-        screen_shot_edit_entry = tk.Entry(canvas, textvariable=self.screen_shot_edit_var).place(x=55, y=120)
+        screen_shot_edit_label = tk.Label(canvas, text='Keybind to screen shot and edit').place(x=180, y=140)
+        screen_shot_edit_entry = tk.Entry(canvas, textvariable=self.screen_shot_edit_var).place(x=55, y=140)
         
         self.settings_window_var = tk.StringVar(value=self.settings_window)
-        settings_window_label = tk.Label(canvas, text='Keybind to open settings window').place(x=180, y=145)
-        settings_window_entry = tk.Entry(canvas, textvariable=self.settings_window_var).place(x=55, y=145)
+        settings_window_label = tk.Label(canvas, text='Keybind to open settings window').place(x=180, y=165)
+        settings_window_entry = tk.Entry(canvas, textvariable=self.settings_window_var).place(x=55, y=165)
         
         save_button = tk.Button(canvas, text='Save changes', command=self.__save_keybind_changes).place(x=50, y=300)
         
@@ -217,6 +237,7 @@ class SettingsWindow:
     def __init_settings(self):
         self.storage_local: int = self.settings.getint('Storage', 'local')
         self.storage_db: int = self.settings.getint('Storage', 'db')
+        self.is_private: int = self.settings.getint('Storage', 'is_private')
         self.screen_shot: str = self.settings.get('KeyBinds', 'screen_shot')
         self.screen_shot_edit: str = self.settings.get('KeyBinds', 'screen_shot_edit')
         self.settings_window: str = self.settings.get('KeyBinds', 'settings_window')
@@ -225,7 +246,8 @@ class SettingsWindow:
         if not os.path.exists(self.settings_path):
             self.settings = configparser.ConfigParser()
             self.settings['Storage'] = {'local': '1',
-                                        'db': '0'}
+                                        'db': '0',
+                                        'is_private': '1'}
             self.settings['KeyBinds'] = {'screen_shot': 'ctrl+1',
                                         'screen_shot_edit': 'ctrl+2',
                                         'settings_window': 'ctrl+3'}
@@ -240,46 +262,32 @@ def main():
     app_dirs = AppDirs()
     if login_window.user.logged_in:
         settings = SettingsWindow()
-    while True:
-        if login_window.user.logged_in:
-            if keyboard.is_pressed(settings.screen_shot): # Full screen shot
-                screen = ImageGrab.grab()
-                image_name = f'\\{int(time.time())}.jpg'
-                image_path = app_dirs.images_dir + image_name
-                if settings.storage_local:
-                    screen.save(image_path)
-                if settings.storage_db:
-                    screen.save(image_path)
-                    url = "http://127.0.0.1:8000/imager/api/upload_img/"
+    while login_window.user.logged_in:
+        if keyboard.is_pressed(settings.screen_shot): # Full screen shot
+            screen = ImageGrab.grab()
+            image_name = f'\\{int(time.time())}.jpg'
+            image_path = app_dirs.images_dir + image_name
+            if settings.storage_local:
+                screen.save(image_path)
+            if settings.storage_db:
+                screen.save(image_path)
+                api = API()
+                with open(image_path, 'rb') as img:
+                    api.upload_img(login_window.user.username, login_window.user._password, bool(settings.is_private), GetWindowText(GetForegroundWindow()), img)
+                    img.close()
+                os.remove(image_path)
+        if keyboard.is_pressed(settings.screen_shot_edit): # Select a rectangle inside screen shot
+            screen = ImageGrab.grab()
+            image_name = f'\\{int(time.time())}.jpg'
+            image_path = app_dirs.images_dir + image_name
+            EditableImageWindow(screen, image_path)
+            api = API()
+            with open(image_path, 'rb') as img:
+                api.upload_img(login_window.user.username, login_window.user._password, bool(settings.is_private), GetWindowText(GetForegroundWindow()), img)
+                img.close()
+            os.remove(image_path)
+        if keyboard.is_pressed(settings.settings_window): # Settings window
+            settings = SettingsWindow()
     
-                    username = login_window.user.username
-                    password = login_window.user._password
-                    is_private = True
-                    description = 'From desktop app'
-                    with open(image_path, 'rb') as img:
-                        image = {'image': img}
-                        data = {'username': username, 'password': password, 'is_private':is_private, 'description': description}
-                        # sending get request and saving the response as response object
-                        r = requests.post(url = url, data=data, files=image)
-                        img.close()
-                    os.remove(image_path)
-            if keyboard.is_pressed(settings.screen_shot_edit): # Select a rectangle inside screen shot
-                screen = ImageGrab.grab()
-                image_name = f'\\{int(time.time())}.jpg'
-                image_path = app_dirs.images_dir + image_name
-                EditableImageWindow(screen, image_path)
-            if keyboard.is_pressed(settings.settings_window): # Settings window
-                settings = SettingsWindow()
-        else:
-            break
-    #app_dirs = AppDirs()
-    #db = DB()
-    #with open("C:\\Users\\Aironas\\Documents\\Imager\\Images\\1713174697.jpg", "rb") as image:
-    #    f = image.read()
-    #    b = bytearray(f)
-    #db.add_row_image(b, "asd", date.today())
-    #del db22
-    
-
 if __name__ == "__main__":
     main()
