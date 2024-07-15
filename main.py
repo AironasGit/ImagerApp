@@ -10,6 +10,7 @@ import psycopg2 as pg
 from PIL import Image, ImageTk, ImageGrab
 import requests
 from win32gui import GetWindowText, GetForegroundWindow
+import time
 
 def popup_message(message: str):
     tkinter.messagebox.showinfo("",message) 
@@ -17,9 +18,10 @@ def popup_message(message: str):
 class API:
     validate_user_url: str
     upload_img_url: str
+    api_key: str
     def __init__(self):
-        self.validate_user_url = 'http://127.0.0.1:8000/imager/api/validate_user/'
-        self.upload_img_url = 'http://127.0.0.1:8000/imager/api/upload_img/'
+        self.validate_user_url = 'http://194.135.93.240/imager/api/validate_user/'
+        self.upload_img_url = 'http://194.135.93.240/imager/api/upload_img/'
         
     def login(self, username: str, password: str) -> int:
         data = {'username': username, 'password': password}
@@ -273,9 +275,14 @@ def main():
                 screen.save(image_path)
                 api = API()
                 with open(image_path, 'rb') as img:
-                    api.upload_img(login_window.user.username, login_window.user._password, bool(settings.is_private), GetWindowText(GetForegroundWindow()), img)
+                    r_code = api.upload_img(login_window.user.username, login_window.user._password, bool(settings.is_private), GetWindowText(GetForegroundWindow()), img)
+                    match r_code:
+                        case _:
+                            popup_message("Something is wrong")
+                    
                     img.close()
-                os.remove(image_path)
+                if not settings.storage_local:
+                    os.remove(image_path)
         if keyboard.is_pressed(settings.screen_shot_edit): # Select a rectangle inside screen shot
             screen = ImageGrab.grab()
             image_name = f'\\{int(time.time())}.jpg'
@@ -285,9 +292,11 @@ def main():
             with open(image_path, 'rb') as img:
                 api.upload_img(login_window.user.username, login_window.user._password, bool(settings.is_private), GetWindowText(GetForegroundWindow()), img)
                 img.close()
-            os.remove(image_path)
+            if not settings.storage_local:
+                os.remove(image_path)
         if keyboard.is_pressed(settings.settings_window): # Settings window
             settings = SettingsWindow()
+    time.sleep(0.01)
     
 if __name__ == "__main__":
     main()
