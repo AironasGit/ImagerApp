@@ -165,7 +165,7 @@ class LoginWindow:
     
     def __register_button(self):
         import webbrowser
-        webbrowser.open('http://127.0.0.1:8000/imager/register/')
+        webbrowser.open('http://194.135.93.240/imager/register/')
     
     def __login_button(self):
         self.user.login(self.username, self._password)
@@ -276,9 +276,6 @@ def main():
                 api = API()
                 with open(image_path, 'rb') as img:
                     r_code = api.upload_img(login_window.user.username, login_window.user._password, bool(settings.is_private), GetWindowText(GetForegroundWindow()), img)
-                    match r_code:
-                        case _:
-                            popup_message("Something is wrong")
                     
                     img.close()
                 if not settings.storage_local:
@@ -296,7 +293,7 @@ def main():
                 os.remove(image_path)
         if keyboard.is_pressed(settings.settings_window): # Settings window
             settings = SettingsWindow()
-    time.sleep(0.01)
+    
     
 if __name__ == "__main__":
     main()
