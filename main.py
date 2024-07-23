@@ -264,8 +264,8 @@ def main():
     app_dirs = AppDirs()
     if login_window.user.logged_in:
         settings = SettingsWindow()
-    while login_window.user.logged_in:
-        if keyboard.is_pressed(settings.screen_shot): # Full screen shot
+    if login_window.user.logged_in:
+        def screen_shot(): # Full screen shot
             screen = ImageGrab.grab()
             image_name = f'\\{int(time.time())}.jpg'
             image_path = app_dirs.images_dir + image_name
@@ -276,11 +276,10 @@ def main():
                 api = API()
                 with open(image_path, 'rb') as img:
                     r_code = api.upload_img(login_window.user.username, login_window.user._password, bool(settings.is_private), GetWindowText(GetForegroundWindow()), img)
-                    
                     img.close()
                 if not settings.storage_local:
                     os.remove(image_path)
-        if keyboard.is_pressed(settings.screen_shot_edit): # Select a rectangle inside screen shot
+        def screen_shot_edit(): # Select a rectangle inside screen shot
             screen = ImageGrab.grab()
             image_name = f'\\{int(time.time())}.jpg'
             image_path = app_dirs.images_dir + image_name
@@ -291,9 +290,13 @@ def main():
                 img.close()
             if not settings.storage_local:
                 os.remove(image_path)
-        if keyboard.is_pressed(settings.settings_window): # Settings window
+        def settings_window(): # Settings window
             settings = SettingsWindow()
-    
+            
+        keyboard.add_hotkey(settings.settings_window, settings_window)
+        keyboard.add_hotkey(settings.screen_shot_edit, screen_shot_edit)
+        keyboard.add_hotkey(settings.screen_shot, screen_shot)
+        keyboard.wait()
     
 if __name__ == "__main__":
     main()
