@@ -11,6 +11,7 @@ from PIL import Image, ImageTk, ImageGrab
 import requests
 from win32gui import GetWindowText, GetForegroundWindow
 import time
+import webbrowser
 
 def popup_message(message: str):
     tkinter.messagebox.showinfo("",message) 
@@ -20,8 +21,8 @@ class API:
     upload_img_url: str
     api_key: str
     def __init__(self):
-        self.validate_user_url = 'http://194.135.93.240/imager/api/validate_user/'
-        self.upload_img_url = 'http://194.135.93.240/imager/api/upload_img/'
+        self.validate_user_url = 'https://imager.site/imager/api/validate_user/'
+        self.upload_img_url = 'https://imager.site/imager/api/upload_img/'
         
     def login(self, username: str, password: str) -> int:
         data = {'username': username, 'password': password}
@@ -178,8 +179,7 @@ class LoginWindow:
         self.window.mainloop()    
     
     def __register_button(self):
-        import webbrowser
-        webbrowser.open('http://194.135.93.240/imager/register/')
+        webbrowser.open('https://imager.site/imager/register/')
     
     def __login_button(self):
         self.user.login(self.username, self._password)
