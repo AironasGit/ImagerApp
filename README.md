@@ -1,1 +1,1 @@
-Screenshoting application that uploads to your https://imager.site account
+Screenshot application that uploads to your https://imager.site account
